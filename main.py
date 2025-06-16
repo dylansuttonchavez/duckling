@@ -44,7 +44,7 @@ async def stripe_webhook(request: Request):
 
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
-        customer_email = session.get('customer_email')
+        customer_email = session.get('customer_details', {}).get('email')
 
         if customer_email:
             enviar_correo_confirmacion(customer_email)
@@ -75,5 +75,3 @@ def create_checkout_session():
         cancel_url='https://duckling.so/'
     )
     return {"sessionId": session.id}
-
-# python -m uvicorn main:app --reload
