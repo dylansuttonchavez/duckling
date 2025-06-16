@@ -21,7 +21,7 @@ templates = Jinja2Templates(directory="templates")
 def enviar_correo_confirmacion(email_destino):
     mensaje = MIMEText("Tu inscripción en Duckling está confirmada — Aquí tienes todo el contenido")
     mensaje['Subject'] = 'Gracias por inscribirte en el Curso Intensivo para aprender a crear un spyware funcional. Las clases en vivo, grabaciones y todo el material descargable, incluyendo el certificado y los códigos fuente, se subirán y estarán disponibles en nuestra comunidad exclusiva de Discord. Puedes acceder al contenido y resolver dudas en este enlace: https://discord.gg/RvRtXDBkc3.'
-    mensaje['From'] = 'dylan7138281@gmail.com'
+    mensaje['From'] = 'dylan718281@gmail.com'
     mensaje['To'] = email_destino
 
     with smtplib.SMTP('smtp.gmail.com', 587) as server:
