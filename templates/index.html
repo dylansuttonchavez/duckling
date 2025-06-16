@@ -1,211 +1,43 @@
-<!DOCTYPE html>
-<html lang="es" x-data="{ step: 1 }">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Duckling | Spyware</title>
+from fastapi import FastAPI, Request
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+import stripe
+import os
 
-  <meta name="description" content="Curso intensivo para aprender a crear spyware funcional. Dos días de clases en vivo y grabadas, material descargable, certificado y comunidad exclusiva. Reserva tu lugar hoy." />
-  <meta name="keywords" content="curso spyware, crear spyware, curso intensivo spyware, programación spyware, curso online spyware, Duckling" />
-  <meta name="author" content="Duckling" />
-  <meta name="robots" content="index, follow" />
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <script src="https://js.stripe.com/v3/"></script>
-  <style>
-    @font-face {
-      font-family: 'Geist-Regular';
-      src: url('/static/Geist-Regular.ttf') format('truetype');
-    }
-    .font-geist-regular {
-      font-family: 'Geist-Regular', sans-serif;
-    }
-  </style>
-</head>
+app = FastAPI()
 
-<body class="bg-[#ffffff] text-[#22262E] font-geist-regular min-h-screen">
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-    <div class="flex flex-col md:flex-row max-w-full mx-auto gap-10">
+templates = Jinja2Templates(directory="templates")
 
-        <div class="flex-1 flex flex-col items-center justify-center min-h-screen py-6 sm:py-0 px-6">
-            <div class="flex flex-col items-start max-w-xl space-y-4">
+@app.get("/", response_class=HTMLResponse)
+def read_root(request: Request):
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "stripe_public_key": os.environ.get("STRIPE_PUBLIC_KEY")
+    })
 
-                <div class="flex items-center gap-1.5">
-                    <svg class="size-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M0.464498 15.1249C0.464498 15.1249 7.17087 19.8025 7.57934 20.0364C7.97322 20.2694 8.54969 20.3244 9.05558 20.1324C9.56193 19.9404 9.94169 19.5014 10.0542 19.0623C10.1808 18.6232 11.7135 10.7207 11.7135 10.7207C11.7276 10.611 11.7695 10.2957 11.6005 9.9936C11.3615 9.58231 10.8273 9.36301 10.3492 9.49948C10.0862 9.57591 9.86085 9.74706 9.71675 9.97995C9.63205 10.1305 9.47769 10.3781 9.19628 10.5974C8.98546 10.7621 8.77464 10.8581 8.67628 10.899C7.8184 11.2425 6.86216 10.9541 6.31393 10.2684C5.97652 9.84301 5.37181 9.67831 4.83722 9.88395C4.58448 9.98259 4.37015 10.1598 4.22585 10.3895C4.08155 10.6192 4.01492 10.8893 4.03579 11.1597C4.13462 12.0105 3.64238 12.8609 2.77038 13.204C2.32439 13.3747 1.83373 13.3893 1.37838 13.2454C1.27956 13.2176 0.928499 13.1357 0.576969 13.3277C0.141204 13.547 -0.0837375 14.0684 0.028733 14.5348C0.112968 14.8501 0.366145 15.0562 0.464498 15.1249Z" fill="#FF9538"/>
-                        <path d="M11.6429 4.87643C11.6429 4.87643 14.0335 12.5865 14.2019 12.9983C14.3709 13.4237 14.7925 13.8077 15.3125 13.9583C15.833 14.1094 16.4095 13.9861 16.7751 13.7117C17.1408 13.4374 23.3135 8.10042 23.3135 8.10042C23.505 7.93327 23.6339 7.70593 23.6791 7.45572C23.7497 6.98937 23.4542 6.49525 23.0043 6.3169C22.7456 6.22198 22.4616 6.22198 22.2029 6.3169C22.048 6.3856 21.7666 6.4816 21.4151 6.49525C21.1342 6.50937 20.9233 6.45431 20.8109 6.42654C19.9248 6.17948 19.3342 5.38419 19.3342 4.51974C19.3256 4.24982 19.2309 3.98973 19.0639 3.77747C18.8969 3.56522 18.6664 3.41192 18.4062 3.33997C17.8438 3.18891 17.2673 3.42233 16.9723 3.87503C16.5078 4.61574 15.5939 4.98607 14.6942 4.73901C14.216 4.60209 13.8222 4.31409 13.5695 3.94374C13.4989 3.86091 13.2739 3.58656 12.8805 3.51833C12.4024 3.43597 11.8819 3.71033 11.6852 4.13574C11.5304 4.46515 11.6146 4.76631 11.6429 4.87643Z" fill="#FF9538"/>
-                    </svg>
-                    <p class="text-md font-bold">Duckling</p>
-                </div>
+@app.post("/create-checkout-session")
+def create_checkout_session():
+    session = stripe.checkout.Session.create(
+        payment_method_types=['card'],
+        line_items=[{
+            'price_data': {
+                'currency': 'mxn',
+                'product_data': {'name': 'Curso Intensivo Spyware'},
+                'unit_amount': 22300,
+            },
+            'quantity': 1,
+        }],
+        mode='payment',
+        success_url='https://duckling.so/',
+        cancel_url='https://duckling.so/',
+    )
+    return {"sessionId": session.id}
 
-                <p class="text-sm">Próximo curso: 27 al 28 de Mayo</p>
+# python -m uvicorn main:app --reload
 
-                <h1 class="text-5xl font-semibold">Curso Intensivo: Aprende a Crear un Spyware</h1>
-
-                <p class="text-lg leading-relaxed">Dos días, dos clases de 3 horas cada una, donde aprenderás desde cero a diseñar y programar un spyware funcional. Incluye:</p>
-
-                <ul class="list-disc list-inside space-y-1">
-                    <li>Acceso a clases en vivo y grabadas</li>
-                    <li>Material en PDF con resumen y códigos fuente</li>
-                    <li>Certificado oficial de finalización</li>
-                    <li>Acceso a nuestra comunidad exclusiva para resolver dudas y networking</li>
-                </ul>
-
-                <p class="text-md font-semibold">Precio de inscripción: <span class="text-[#FF9538]">$223 MXN</span></p>
-
-                <p class="text-sm text-gray-600">Cupos limitados, ¡asegura tu lugar hoy!</p>
-
-                <button id="checkout-button" class="bg-[#333333] hover:bg-[#2b2b2b] transition-colors text-[#ffffff] rounded-md px-3 py-2 flex items-center justify-center gap-2 min-w-[140px] min-h-[44px] relative">
-                    <span id="button-text" class="transition-opacity duration-200">Comprar Boleto</span>
-                    <svg id="spinner" class="absolute w-5 h-5 animate-spin text-[#ffffff] fill-[#FF9538] hidden" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="currentColor"/>
-                        <path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z" fill="currentFill"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-
-        <div class="hidden xl:flex flex-shrink-0 self-start">
-            <svg class="w-[566px] h-auto" viewBox="0 0 721 729" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect y="312" width="103" height="356" fill="currentColor"/>
-                <rect x="206" y="312" width="103" height="356" fill="currentColor"/>
-                <rect x="412" y="312" width="103" height="356" fill="currentColor"/>
-                <rect x="618" y="312" width="103" height="356" fill="currentColor"/>
-                <rect x="515" y="134" width="103" height="178" fill="currentColor"/>
-                <rect x="309" y="134" width="103" height="178" fill="currentColor"/>
-                <rect x="412" y="46" width="103" height="88" fill="currentColor"/>
-                <rect x="618" y="46" width="103" height="88" fill="currentColor"/>
-                <rect x="206" y="46" width="103" height="88" fill="currentColor"/>
-                <rect x="309" width="103" height="46" fill="currentColor"/>
-                <rect x="515" width="103" height="46" fill="currentColor"/>
-                <rect x="1" width="205" height="46" fill="currentColor"/>
-                <rect x="103" y="668" width="103" height="61" fill="currentColor"/>
-                <rect x="309" y="668" width="103" height="61" fill="currentColor"/>
-            </svg>
-        </div>
-
-    </div>
-
-    <div class="bg-[#f7f7f7] min-h-screen flex items-center justify-center">
-        <div class="max-w-xl w-full gap-3 flex flex-col p-6">
-
-            <div class="mb-6">
-                <h2 class="text-2xl text-center mb-2 font-semibold">Preguntas Frecuentes</h2>
-                <p class="text-md text-center">No dudes en contactarme por <a href="mailto:dylan718281@gmail.com" class="underline">email</a> o <a href="https://wa.me/5215517014193" class="underline" target="_blank" rel="noopener noreferrer">whatsapp</a> para cualquier duda.</p>
-            </div>
-
-            <button class="toggle-button bg-[#F0F0F0] border border-[#E6E6E6] w-full px-3 py-1.5 rounded-md">
-                <div class="flex items-center">
-                    <p class="text-left overflow-hidden truncate whitespace-nowrap">¿Cuándo es el próximo curso intensivo?</p>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon size-4 ml-auto transition duration-300 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m6 9 6 6 6-6"/>
-                    </svg>
-                </div>
-                <div class="respuesta hidden mt-2">
-                    <p class="text-left text-sm">El próximo curso se realizará del 27 al 28 de mayo, con dos clases en vivo de 3 horas cada una.</p>
-                </div>
-            </button>
-
-            <button class="toggle-button bg-[#F0F0F0] border border-[#E6E6E6] w-full px-3 py-1.5 rounded-md">
-                <div class="flex items-center">
-                    <p class="text-left overflow-hidden truncate whitespace-nowrap">¿Qué incluye el curso intensivo?</p>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon size-4 ml-auto transition duration-300 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m6 9 6 6 6-6"/>
-                    </svg>
-                </div>
-                <div class="respuesta hidden mt-2">
-                    <p class="text-left text-sm">Incluye acceso a clases en vivo y grabadas, material en PDF con resumen y códigos fuente, certificado oficial y acceso a la comunidad exclusiva para resolver dudas.</p>
-                </div>
-            </button>
-
-            <button class="toggle-button bg-[#F0F0F0] border border-[#E6E6E6] w-full px-3 py-1.5 rounded-md">
-                <div class="flex items-center">
-                    <p class="text-left overflow-hidden truncate whitespace-nowrap">¿Cuál es el costo de inscripción?</p>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon size-4 ml-auto transition duration-300 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m6 9 6 6 6-6"/>
-                    </svg>
-                </div>
-                <div class="respuesta hidden mt-2">
-                    <p class="text-left text-sm">El precio de inscripción es de $223 MXN.</p>
-                </div>
-            </button>
-
-            <button class="toggle-button bg-[#F0F0F0] border border-[#E6E6E6] w-full px-3 py-1.5 rounded-md">
-                <div class="flex items-center">
-                    <p class="text-left overflow-hidden truncate whitespace-nowrap">¿Puedo acceder a las grabaciones después del curso?</p>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon size-4 ml-auto transition duration-300 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m6 9 6 6 6-6"/>
-                    </svg>
-                </div>
-                <div class="respuesta hidden mt-2">
-                    <p class="text-left text-sm">Sí, tendrás acceso tanto a las clases en vivo como a las grabaciones para repasar el contenido cuando desees.</p>
-                </div>
-            </button>
-
-            <button class="toggle-button bg-[#F0F0F0] border border-[#E6E6E6] w-full px-3 py-1.5 rounded-md">
-                <div class="flex items-center">
-                    <p class="text-left truncate whitespace-nowrap overflow-hidden">¿Qué debo hacer para asegurar mi lugar en el curso?</p>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon size-4 ml-auto transition duration-300 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m6 9 6 6 6-6"/>
-                    </svg>
-                </div>
-                <div class="respuesta hidden mt-2">
-                    <p class="text-left text-sm">Solo necesitas hacer clic en "Comprar Boleto" y completar el pago para reservar tu lugar. Recuerda que los cupos son limitados.</p>
-                </div>
-            </button>
-
-        </div>
-    </div>
-
-    <footer class="flex items-center text-sm p-6 max-w-full mx-auto">
-        <p>© 2025 Duckling</p>
-        <div class="flex items-center ml-auto gap-3">
-           <a href="/" class="hover:underline">Aviso de privacidad</a>
-           <a href="mailto:dylan718281@gmail.com" class="hover:underline">Contacto</a>
-        </div>
-    </footer>
-
-    <script>
-        const stripe = Stripe('{{ stripe_public_key }}');
-        const btn = document.getElementById('checkout-button');
-        const txt = document.getElementById('button-text');
-        const spn = document.getElementById('spinner');
-
-        const toggle = (loading) => {
-            txt.classList.toggle('hidden', loading);
-            spn.classList.toggle('hidden', !loading);
-            btn.disabled = loading;
-        };
-
-        btn.addEventListener('click', async () => {
-            toggle(true);
-            try {
-            const { sessionId } = await fetch('/create-checkout-session', { method: 'POST' }).then(r => r.json());
-            const { error } = await stripe.redirectToCheckout({ sessionId });
-            if (error) alert(error.message);
-            } catch (e) {
-            console.error(e);
-            } finally {
-            toggle(false);
-            }
-        });
-    </script>
-
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-        const toggleButtons = document.querySelectorAll(".toggle-button");
-
-        toggleButtons.forEach(button => {
-            const icon = button.querySelector(".icon");
-            const respuesta = button.querySelector(".respuesta");
-
-            button.addEventListener("click", function () {
-            icon.classList.toggle("rotate-180");
-            respuesta.classList.toggle("hidden");
-            });
-        });
-        });
-    </script>
-</body>
-</html>
+# python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
