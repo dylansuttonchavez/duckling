@@ -28,16 +28,12 @@ def create_checkout_session():
             'price_data': {
                 'currency': 'mxn',
                 'product_data': {'name': 'Curso Intensivo Spyware'},
-                'unit_amount': 22300,
+                'unit_amount': 22300
             },
-            'quantity': 1,
+            'quantity': 1
         }],
         mode='payment',
-        success_url='https://tu-dominio.com/success',
-        cancel_url='https://tu-dominio.com/cancel',
+        success_url='https://duckling.so/',
+        cancel_url='https://duckling.so/'
     )
     return {"sessionId": session.id}
-
-# python -m uvicorn main:app --reload
-
-# python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
