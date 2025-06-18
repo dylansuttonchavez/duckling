@@ -82,7 +82,7 @@ def create_checkout_session():
 @app.get("/s/{session_id}", response_class=HTMLResponse)
 async def confirmacion(request: Request, session_id: str):
     # Verificar si el enlace ya fue usado
-    res = supabase.table("access_sessions").select("*").eq("session_id", session_id).single().execute()
+    res = supabase.table("access_sessions").select("*").eq("session_id", session_id).maybeSingle().execute()
     data = res.data
 
     if data and data["used"]:
