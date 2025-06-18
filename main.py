@@ -103,7 +103,7 @@ async def confirmacion(request: Request, session_id: str, response: Response):
     customer_email = session.customer_details.email if session.customer_details else None
     customer_name = session.customer_details.name if session.customer_details else None
 
-    return templates.TemplateResponse("confirmacion.html", {
+    return templates.TemplateResponse("confirmation.html", {
         "request": request,
         "customer_email": customer_email or "",
         "customer_name": customer_name or "Alumno",
