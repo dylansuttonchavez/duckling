@@ -99,9 +99,19 @@ async def confirmacion(request: Request, session_id: str, response: Response, ac
             raise HTTPException(403, "Pago no confirmado")
 
         expires_at = (now + timedelta(minutes=10)).isoformat()
-        supabase.table("access_sessions").insert({"session_id": session_id, "expires_at": expires_at}).execute()
+        insert_result = supabase.table("access_sessions") \
+            .insert({"session_id": session_id, "expires_at": expires_at}) \
+            .on_conflict("session_id") \
+            .do_nothing() \
+            .execute()
 
         response.set_cookie("access_confirmacion", session_id, httponly=True, max_age=600)
+
+        # Solo enviar correo si realmente se insertó el registro (es decir, si no existía antes)
+        if insert_result.data:
+            customer_email = session.customer_details.email if session.customer_details else None
+            if customer_email:
+                enviar_correo_confirmacion(customer_email)
 
     # Obtener detalles para mostrar
     if 'session' not in locals():
