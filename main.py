@@ -1,30 +1,24 @@
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, Request, Response, HTTPException, Cookie
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import stripe
-import redis
 import os
-import json
 import smtplib
 from email.mime.text import MIMEText
+from supabase import create_client
 
-# Cargar variables de entorno
 load_dotenv()
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
-
-# Conexión Redis (localhost por defecto)
-redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 app = FastAPI()
-
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Función para enviar email
 def enviar_correo_confirmacion(email_destino):
     mensaje = MIMEText(
         'Gracias por inscribirte en el Curso Intensivo para aprender a crear un spyware funcional. '
@@ -54,15 +48,6 @@ async def stripe_webhook(request: Request):
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
-        session_id = session["id"]
-        expire = timedelta(minutes=10)
-
-        # Guardar acceso en Redis con expiración
-        redis_client.setex(f"session:{session_id}", expire, json.dumps({
-            "used": False
-        }))
-
-        # Enviar correo
         email = session.get("customer_details", {}).get("email")
         if email:
             enviar_correo_confirmacion(email)
@@ -95,31 +80,32 @@ def create_checkout_session():
     return {"sessionId": session.id}
 
 @app.get("/s/{session_id}", response_class=HTMLResponse)
-async def confirmacion(request: Request, session_id: str, response: Response):
-    key = f"session:{session_id}"
-    data = redis_client.get(key)
+async def confirmacion(request: Request, session_id: str, response: Response, access_confirmacion: str = Cookie(None)):
+    now = datetime.utcnow()
 
-    if not data:
-        raise HTTPException(status_code=410, detail="El enlace ha expirado o no existe")
+    if access_confirmacion == session_id:
+        res = supabase.table("access_sessions").select("expires_at").eq("session_id", session_id).single().execute()
+        data = res.data
+        if not data or datetime.fromisoformat(data["expires_at"]) < now:
+            supabase.table("access_sessions").delete().eq("session_id", session_id).execute()
+            response.delete_cookie("access_confirmacion")
+            raise HTTPException(403, "Acceso expirado")
+    else:
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+        except Exception:
+            raise HTTPException(404, "Sesión no encontrada")
+        if session.payment_status != "paid":
+            raise HTTPException(403, "Pago no confirmado")
 
-    session_data = json.loads(data)
+        expires_at = (now + timedelta(minutes=10)).isoformat()
+        supabase.table("access_sessions").insert({"session_id": session_id, "expires_at": expires_at}).execute()
 
-    if session_data.get("used"):
-        raise HTTPException(status_code=403, detail="Este enlace ya fue utilizado")
+        response.set_cookie("access_confirmacion", session_id, httponly=True, max_age=600)
 
-    # Validar con Stripe que el pago esté confirmado
-    try:
+    # Obtener detalles para mostrar
+    if 'session' not in locals():
         session = stripe.checkout.Session.retrieve(session_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Sesión inválida")
-
-    if session.payment_status != "paid":
-        raise HTTPException(status_code=403, detail="Pago no confirmado")
-
-    # Marcar como usado (actualiza TTL restante)
-    session_data["used"] = True
-    ttl = redis_client.ttl(key)
-    redis_client.setex(key, ttl, json.dumps(session_data))
 
     customer_email = session.customer_details.email if session.customer_details else ""
     customer_name = session.customer_details.name if session.customer_details else "Alumno"
@@ -128,5 +114,5 @@ async def confirmacion(request: Request, session_id: str, response: Response):
         "request": request,
         "customer_email": customer_email,
         "customer_name": customer_name,
-        "fecha_actual": datetime.utcnow().strftime("%m.%d.%Y")
+        "fecha_actual": now.strftime("%m.%d.%Y")
     }, response=response)
