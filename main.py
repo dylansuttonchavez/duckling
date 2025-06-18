@@ -1,24 +1,30 @@
-from fastapi import FastAPI, Request, Response, HTTPException, Cookie
+from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-import stripe
-import os
-import smtplib
-from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+import stripe
+import redis
+import os
+import json
+import smtplib
+from email.mime.text import MIMEText
 
+# Cargar variables de entorno
 load_dotenv()
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 
+# Conexión Redis (localhost por defecto)
+redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 templates = Jinja2Templates(directory="templates")
 
+# Función para enviar email
 def enviar_correo_confirmacion(email_destino):
     mensaje = MIMEText(
         'Gracias por inscribirte en el Curso Intensivo para aprender a crear un spyware funcional. '
@@ -26,9 +32,7 @@ def enviar_correo_confirmacion(email_destino):
         'y los códigos fuente, se subirán y estarán disponibles en nuestra comunidad exclusiva de Discord. '
         'Puedes acceder al contenido y resolver dudas en este enlace: https://discord.gg/RvRtXDBkc3.'
     )
-    mensaje['Subject'] = (
-        "Tu inscripción en Duckling está confirmada — Aquí tienes todo el contenido"
-    )
+    mensaje['Subject'] = "Tu inscripción en Duckling está confirmada — Aquí tienes todo el contenido"
     mensaje['From'] = 'dylan718281@gmail.com'
     mensaje['To'] = email_destino
 
@@ -46,14 +50,22 @@ async def stripe_webhook(request: Request):
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
     except stripe.error.SignatureVerificationError:
-        return {"error": "Invalid signature"}
+        raise HTTPException(status_code=400, detail="Firma inválida")
 
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        customer_email = session.get('customer_details', {}).get('email')
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        session_id = session["id"]
+        expire = timedelta(minutes=10)
 
-        if customer_email:
-            enviar_correo_confirmacion(customer_email)
+        # Guardar acceso en Redis con expiración
+        redis_client.setex(f"session:{session_id}", expire, json.dumps({
+            "used": False
+        }))
+
+        # Enviar correo
+        email = session.get("customer_details", {}).get("email")
+        if email:
+            enviar_correo_confirmacion(email)
 
     return {"status": "success"}
 
@@ -83,35 +95,38 @@ def create_checkout_session():
     return {"sessionId": session.id}
 
 @app.get("/s/{session_id}", response_class=HTMLResponse)
-async def confirmacion(
-    request: Request, 
-    session_id: str, 
-    response: Response, 
-    access_confirmacion: str = Cookie(default=None)
-):
-    if access_confirmacion != session_id:
-        try:
-            session = stripe.checkout.Session.retrieve(session_id)
-        except Exception:
-            raise HTTPException(status_code=404, detail="Sesión no encontrada")
+async def confirmacion(request: Request, session_id: str, response: Response):
+    key = f"session:{session_id}"
+    data = redis_client.get(key)
 
-        if session.payment_status != "paid":
-            raise HTTPException(status_code=403, detail="Pago no confirmado")
+    if not data:
+        raise HTTPException(status_code=410, detail="El enlace ha expirado o no existe")
 
-        expire = datetime.utcnow() + timedelta(minutes=10)
-        response.set_cookie(
-            key="access_confirmacion",
-            value=session_id,
-            httponly=True,
-            expires=expire.strftime("%a, %d %b %Y %H:%M:%S GMT")
-        )
+    session_data = json.loads(data)
 
-    customer_email = session.customer_details.email if session.customer_details else None
+    if session_data.get("used"):
+        raise HTTPException(status_code=403, detail="Este enlace ya fue utilizado")
+
+    # Validar con Stripe que el pago esté confirmado
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Sesión inválida")
+
+    if session.payment_status != "paid":
+        raise HTTPException(status_code=403, detail="Pago no confirmado")
+
+    # Marcar como usado (actualiza TTL restante)
+    session_data["used"] = True
+    ttl = redis_client.ttl(key)
+    redis_client.setex(key, ttl, json.dumps(session_data))
+
+    customer_email = session.customer_details.email if session.customer_details else ""
     customer_name = session.customer_details.name if session.customer_details else "Alumno"
 
     return templates.TemplateResponse("confirmation.html", {
         "request": request,
-        "customer_email": customer_email or "",
+        "customer_email": customer_email,
         "customer_name": customer_name,
         "fecha_actual": datetime.utcnow().strftime("%m.%d.%Y")
     }, response=response)
