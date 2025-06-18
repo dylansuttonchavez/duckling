@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from dotenv import load_dotenv
@@ -67,7 +67,10 @@ async def legal(request: Request):
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 404:
         return RedirectResponse(url="/")
-    return await app.default_exception_handler(request, exc)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail or "Error inesperado"}
+    )
 
 @app.get("/access", response_class=HTMLResponse)
 async def access(request: Request):
