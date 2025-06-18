@@ -1,14 +1,15 @@
-CREATE TABLE access_sessions (
-  session_id TEXT PRIMARY KEY,
-  expires_at TIMESTAMP NOT NULL
+-- Crear tabla si no existe
+create table if not exists access_sessions (
+  session_id text primary key,
+  expires_at timestamp not null
 );
 
-ALTER TABLE access_sessions ENABLE ROW LEVEL SECURITY;
+-- Activar seguridad a nivel de fila (RLS)
+alter table access_sessions enable row level security;
 
--- Permite leer a cualquiera (por ejemplo, público o usuario autenticado)
-CREATE POLICY "Allow read access" ON access_sessions
-FOR SELECT USING (true);
-
--- Permite insertar registros (si necesitas que la API publique sesiones)
-CREATE POLICY "Allow insert access" ON access_sessions
-FOR INSERT WITH CHECK (true);
+-- Políticas necesarias (lectura, escritura, borrado público)
+create policy "allow all actions"
+on access_sessions
+for all
+using (true)
+with check (true);
