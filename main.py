@@ -81,7 +81,7 @@ def create_checkout_session():
             'price_data': {
                 'currency': 'mxn',
                 'product_data': {'name': 'Curso Intensivo Spyware'},
-                'unit_amount': 223000
+                'unit_amount': 22300
             },
             'quantity': 1
         }],
