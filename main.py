@@ -80,17 +80,28 @@ def create_checkout_session():
     return {"sessionId": session.id}
 
 @app.get("/s/{session_id}", response_class=HTMLResponse)
-async def confirmacion(request: Request, session_id: str, response: Response, access_confirmacion: str = Cookie(None)):
+async def confirmacion(
+    request: Request,
+    session_id: str,
+    response: Response,
+    access_confirmacion: str = Cookie(None),
+):
     now = datetime.utcnow()
 
     if access_confirmacion == session_id:
-        res = supabase.table("access_sessions").select("expires_at").eq("session_id", session_id).single().execute()
+        # Usuario ya tiene cookie; solo validamos expiración
+        res = supabase.table("access_sessions") \
+            .select("expires_at") \
+            .eq("session_id", session_id) \
+            .single().execute()
         data = res.data
         if not data or datetime.fromisoformat(data["expires_at"]) < now:
+            # Expiró: borramos y forzamos nuevo acceso
             supabase.table("access_sessions").delete().eq("session_id", session_id).execute()
             response.delete_cookie("access_confirmacion")
             raise HTTPException(403, "Acceso expirado")
     else:
+        # Primera vez: validamos pago y creamos/actualizamos sesión
         try:
             session = stripe.checkout.Session.retrieve(session_id)
         except Exception:
@@ -98,31 +109,34 @@ async def confirmacion(request: Request, session_id: str, response: Response, ac
         if session.payment_status != "paid":
             raise HTTPException(403, "Pago no confirmado")
 
+        # Upsert de la sesión con nueva expiración
         expires_at = (now + timedelta(minutes=10)).isoformat()
-        insert_result = supabase.table("access_sessions") \
-            .insert({"session_id": session_id, "expires_at": expires_at}) \
-            .on_conflict("session_id") \
-            .do_nothing() \
+        supabase.table("access_sessions") \
+            .upsert({"session_id": session_id, "expires_at": expires_at}) \
             .execute()
 
+        # Seteamos la cookie para próximos accesos
         response.set_cookie("access_confirmacion", session_id, httponly=True, max_age=600)
 
-        # Solo enviar correo si realmente se insertó el registro (es decir, si no existía antes)
-        if insert_result.data:
-            customer_email = session.customer_details.email if session.customer_details else None
-            if customer_email:
-                enviar_correo_confirmacion(customer_email)
+        # Enviamos el correo de confirmación solo la primera vez
+        customer_email = session.customer_details.email if session.customer_details else None
+        if customer_email:
+            enviar_correo_confirmacion(customer_email)
 
-    # Obtener detalles para mostrar
+    # En este punto la sesión es válida: recuperamos datos siempre
     if 'session' not in locals():
         session = stripe.checkout.Session.retrieve(session_id)
 
-    customer_email = session.customer_details.email if session.customer_details else ""
-    customer_name = session.customer_details.name if session.customer_details else "Alumno"
+    customer_email = session.customer_details.email or ""
+    customer_name = session.customer_details.name or "Alumno"
 
-    return templates.TemplateResponse("confirmation.html", {
-        "request": request,
-        "customer_email": customer_email,
-        "customer_name": customer_name,
-        "fecha_actual": now.strftime("%m.%d.%Y")
-    }, response=response)
+    return templates.TemplateResponse(
+        "confirmation.html",
+        {
+            "request": request,
+            "customer_email": customer_email,
+            "customer_name": customer_name,
+            "fecha_actual": now.strftime("%m.%d.%Y")
+        },
+        response=response
+    )
