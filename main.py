@@ -58,6 +58,10 @@ def read_root(request: Request):
         "stripe_public_key": os.environ.get("STRIPE_PUBLIC_KEY")
     })
 
+@app.get("/access", response_class=HTMLResponse)
+async def access(request: Request):
+    return templates.TemplateResponse("access.html", {"request": request})
+
 @app.post("/create-checkout-session")
 def create_checkout_session():
     session = stripe.checkout.Session.create(
