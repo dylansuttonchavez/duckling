@@ -58,6 +58,16 @@ def read_root(request: Request):
         "stripe_public_key": os.environ.get("STRIPE_PUBLIC_KEY")
     })
 
+@app.get("/legal", response_class=HTMLResponse)
+async def legal(request: Request):
+    return templates.TemplateResponse("legal.html", {"request": request})
+
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        return RedirectResponse(url="/")
+    return await app.default_exception_handler(request, exc)
+
 @app.get("/access", response_class=HTMLResponse)
 async def access(request: Request):
     return templates.TemplateResponse("access.html", {"request": request})
