@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, Request, Response, HTTPException, Cookie
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,13 +21,13 @@ templates = Jinja2Templates(directory="templates")
 
 def enviar_correo_confirmacion(email_destino):
     mensaje = MIMEText(
-        "Tu inscripción en Duckling está confirmada — Aquí tienes todo el contenido"
-    )
-    mensaje['Subject'] = (
         'Gracias por inscribirte en el Curso Intensivo para aprender a crear un spyware funcional. '
         'Las clases en vivo, grabaciones y todo el material descargable, incluyendo el certificado '
         'y los códigos fuente, se subirán y estarán disponibles en nuestra comunidad exclusiva de Discord. '
         'Puedes acceder al contenido y resolver dudas en este enlace: https://discord.gg/RvRtXDBkc3.'
+    )
+    mensaje['Subject'] = (
+        "Tu inscripción en Duckling está confirmada — Aquí tienes todo el contenido"
     )
     mensaje['From'] = 'dylan718281@gmail.com'
     mensaje['To'] = email_destino
@@ -83,29 +83,35 @@ def create_checkout_session():
     return {"sessionId": session.id}
 
 @app.get("/s/{session_id}", response_class=HTMLResponse)
-async def confirmacion(request: Request, session_id: str, response: Response):
-    try:
-        session = stripe.checkout.Session.retrieve(session_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+async def confirmacion(
+    request: Request, 
+    session_id: str, 
+    response: Response, 
+    access_confirmacion: str = Cookie(default=None)
+):
+    if access_confirmacion != session_id:
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Sesión no encontrada")
 
-    if session.payment_status != "paid":
-        raise HTTPException(status_code=403, detail="Pago no confirmado")
+        if session.payment_status != "paid":
+            raise HTTPException(status_code=403, detail="Pago no confirmado")
 
-    expire = datetime.utcnow() + timedelta(minutes=10)
-    response.set_cookie(
-        key="access_confirmacion",
-        value="true",
-        httponly=True,
-        expires=expire.strftime("%a, %d %b %Y %H:%M:%S GMT")
-    )
+        expire = datetime.utcnow() + timedelta(minutes=10)
+        response.set_cookie(
+            key="access_confirmacion",
+            value=session_id,
+            httponly=True,
+            expires=expire.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        )
 
     customer_email = session.customer_details.email if session.customer_details else None
-    customer_name = session.customer_details.name if session.customer_details else None
+    customer_name = session.customer_details.name if session.customer_details else "Alumno"
 
     return templates.TemplateResponse("confirmation.html", {
         "request": request,
         "customer_email": customer_email or "",
-        "customer_name": customer_name or "Alumno",
+        "customer_name": customer_name,
         "fecha_actual": datetime.utcnow().strftime("%m.%d.%Y")
-    }, status_code=200, background=None, headers=None, media_type=None, response=response)
+    }, response=response)
