@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,24 +17,24 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-def enviar_correo_confirmacion(email_destino):
-    mensaje = MIMEText(
+def send_confirmation_email(recipient_email):
+    message = MIMEText(
         'Gracias por inscribirte en el Curso Intensivo para aprender a crear un spyware funcional. '
         'Las clases en vivo, grabaciones y todo el material descargable, incluyendo el certificado '
         'y los códigos fuente, se subirán y estarán disponibles en nuestra comunidad exclusiva de Discord. '
         'Puedes acceder al contenido y resolver dudas en este enlace: https://discord.gg/RvRtXDBkc3.'
     )
-    mensaje['Subject'] = "Tu inscripción en Duckling está confirmada — Aquí tienes todo el contenido"
-    mensaje['From'] = os.environ.get("EMAIL_SENDER")
-    mensaje['To'] = email_destino
+    message['Subject'] = "Tu inscripción en Duckling está confirmada — Aquí tienes todo el contenido"
+    message['From'] = os.environ.get("EMAIL_SENDER")
+    message['To'] = recipient_email
 
     with smtplib.SMTP('smtp.gmail.com', 587) as server:
         server.starttls()
         server.login(os.environ.get("EMAIL_SENDER"), os.environ.get("EMAIL_PASSWORD"))
-        server.send_message(mensaje)
+        server.send_message(message)
 
 @app.post("/webhook")
-async def stripe_webhook(request: Request):
+async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
     endpoint_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
@@ -42,13 +42,13 @@ async def stripe_webhook(request: Request):
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
     except stripe.error.SignatureVerificationError:
-        raise HTTPException(status_code=400, detail="Firma inválida")
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         email = session.get("customer_details", {}).get("email")
         if email:
-            enviar_correo_confirmacion(email)
+            background_tasks.add_task(send_confirmation_email, email)
 
     return {"status": "success"}
 
@@ -69,7 +69,7 @@ async def custom_http_exception_handler(request: Request, exc: StarletteHTTPExce
         return RedirectResponse(url="/")
     return JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.detail or "Error inesperado"}
+        content={"detail": exc.detail or "Unexpected error"}
     )
 
 @app.get("/access", response_class=HTMLResponse)
@@ -84,7 +84,7 @@ def create_checkout_session():
             'price_data': {
                 'currency': 'mxn',
                 'product_data': {'name': 'Curso Intensivo Spyware'},
-                'unit_amount': 22300
+                'unit_amount': 222
             },
             'quantity': 1
         }],
