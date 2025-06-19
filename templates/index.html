@@ -182,13 +182,13 @@
         btn.addEventListener('click', async () => {
             toggle(true);
             try {
-            const { sessionId } = await fetch('/create-checkout-session', { method: 'POST' }).then(r => r.json());
-            const { error } = await stripe.redirectToCheckout({ sessionId });
-            if (error) alert(error.message);
+                const { sessionId } = await fetch('/create-checkout-session', { method: 'POST' }).then(r => r.json());
+                const { error } = await stripe.redirectToCheckout({ sessionId, locale: 'es' });
+                if (error) alert(error.message);
             } catch (e) {
-            console.error(e);
+                console.error(e);
             } finally {
-            toggle(false);
+                toggle(false);
             }
         });
     </script>
