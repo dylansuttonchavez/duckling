@@ -25,12 +25,12 @@ def enviar_correo_confirmacion(email_destino):
         'Puedes acceder al contenido y resolver dudas en este enlace: https://discord.gg/RvRtXDBkc3.'
     )
     mensaje['Subject'] = "Tu inscripción en Duckling está confirmada — Aquí tienes todo el contenido"
-    mensaje['From'] = 'dylan718281@gmail.com'
+    mensaje['From'] = os.environ.get("EMAIL_SENDER")
     mensaje['To'] = email_destino
 
     with smtplib.SMTP('smtp.gmail.com', 587) as server:
         server.starttls()
-        server.login('dylan718281@gmail.com', os.environ.get("EMAIL_PASSWORD"))
+        server.login(os.environ.get("EMAIL_SENDER"), os.environ.get("EMAIL_PASSWORD"))
         server.send_message(mensaje)
 
 @app.post("/webhook")
