@@ -22,7 +22,7 @@ def send_confirmation_email(recipient_email):
         'Gracias por inscribirte en el Curso Intensivo para aprender a crear un spyware funcional. '
         'Las clases en vivo, grabaciones y todo el material descargable, incluyendo el certificado '
         'y los códigos fuente, se subirán y estarán disponibles en nuestra comunidad exclusiva de Discord. '
-        'Puedes acceder al contenido y resolver dudas en este enlace: https://discord.gg/RvRtXDBkc3.'
+        'Puedes acceder al contenido y resolver dudas en este enlace: https://discord.gg/pPUQAYFzFN.'
     )
     message['Subject'] = "Tu inscripción en Duckling está confirmada — Aquí tienes todo el contenido"
     message['From'] = os.environ.get("EMAIL_SENDER")
